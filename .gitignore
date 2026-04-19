@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Build artifacts
+build/
+dist/
+*.spec
+
+# Node / Electron
+node_modules/
+electron/dist/
+
+# Local data (per-folder SQLite DBs, settings)
+data/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# CodeGraph-generated context files at the repo root (optional — remove these
+# two lines if you want to commit your own CONTEXT.md)
+CONTEXT.md

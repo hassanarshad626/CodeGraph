@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>CodeGraph</title>
+<link rel="stylesheet" href="/static/style.css" />
+<script src="https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+<script src="https://unpkg.com/marked@14.1.3/marked.min.js"></script>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo">⬢ CodeGraph</div>
+    <div class="cmdbar">
+      <span class="prompt">MATCH</span>
+      <span class="paren">(n)</span>
+      <span class="kw">OPTIONAL MATCH</span>
+      <span class="paren">(n)-[e]-(m)</span>
+      <span class="kw">RETURN</span> *
+      <span class="kw">LIMIT</span> 500
+    </div>
+    <div class="status" id="status">no folder watched</div>
+    <button id="settingsBtn" class="icon-btn" title="Preferences">⚙</button>
+    <button id="helpBtn" class="icon-btn" title="Show help">?</button>
+  </header>
+
+  <aside id="sidebar">
+    <input id="folderInput" type="text" placeholder="Paste absolute folder path…" />
+    <div class="row">
+      <button id="pickBtn" title="Pick folder (Electron only)">Pick…</button>
+      <button id="watchBtn">Watch</button>
+    </div>
+    <h3>Watched projects</h3>
+    <ul id="projects"></ul>
+
+    <h3>Search</h3>
+    <input id="search" type="text" placeholder="Search nodes…" />
+
+    <h3>Stats</h3>
+    <div id="stats" class="stats"></div>
+
+    <h3>Recent changes</h3>
+    <ul id="changes"></ul>
+
+    <button id="handoffBtn" class="big-btn" title="Generate a prompt to continue with another AI agent">
+      Hand off to another AI →
+    </button>
+    <div class="big-btn-sub">When your credits run out, paste this into Cursor, Antigravity, ChatGPT, etc.</div>
+  </aside>
+
+  <main>
+    <div id="cy"></div>
+
+    <div id="toolbar">
+      <div class="tb-group">
+        <label>Layout</label>
+        <select id="layoutSel">
+          <option value="cose">Force (cose)</option>
+          <option value="concentric">Concentric</option>
+          <option value="breadthfirst">Tree</option>
+          <option value="circle">Circle</option>
+          <option value="grid">Grid</option>
+        </select>
+      </div>
+      <div class="tb-group filters">
+        <label>Show</label>
+        <button class="kind-filter active" data-kind="file">file</button>
+        <button class="kind-filter active" data-kind="class">class</button>
+        <button class="kind-filter active" data-kind="function">function</button>
+        <button class="kind-filter active" data-kind="import">import</button>
+      </div>
+      <div class="tb-group">
+        <button id="fitBtn" title="Fit to screen">⤢ Fit</button>
+        <button id="relayoutBtn" title="Re-run layout">↻ Re-layout</button>
+        <button id="bobBtn" class="active" title="Toggle floating motion">∿ Float</button>
+      </div>
+    </div>
+
+    <div id="legend">
+      <div><span class="dot" style="background:#ff6b8a"></span> file</div>
+      <div><span class="dot" style="background:#ffb347"></span> function</div>
+      <div><span class="dot" style="background:#ff5566"></span> class</div>
+      <div><span class="dot" style="background:#7be37b"></span> import</div>
+    </div>
+
+    <div id="nodeInfo" class="hidden">
+      <div class="ni-header">
+        <span id="niKind" class="ni-kind"></span>
+        <span id="niName" class="ni-name"></span>
+        <button id="niClose">×</button>
+      </div>
+      <div id="niPath" class="ni-path"></div>
+      <div id="niNeighbors" class="ni-neighbors"></div>
+    </div>
+
+    <div id="tooltip" class="hidden"></div>
+  </main>
+
+  <section id="contextPanel">
+    <div class="ctx-header">
+      <span>CONTEXT.md (what agents read)</span>
+      <button id="copyCtx">Copy</button>
+    </div>
+    <div id="contextBody"></div>
+  </section>
+</div>
+
+<!-- Onboarding / Help modal -->
+<div id="onboarding" class="modal hidden">
+  <div class="modal-box">
+    <button class="modal-close" data-close="onboarding">×</button>
+    <h2>Welcome to CodeGraph</h2>
+    <p class="lede">Keep every AI agent on the same page — automatically.</p>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div>
+        <h3>Pick the folder your AI is working on</h3>
+        <p>Click <b>Pick…</b> in the sidebar and choose your project folder.
+           CodeGraph will create three files inside it:
+           <code>CONTEXT.md</code>, <code>CLAUDE.md</code>, and <code>AGENTS.md</code>.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div>
+        <h3>Start talking to your AI as normal</h3>
+        <p>Claude Code auto-reads <code>CLAUDE.md</code>. Cursor, Antigravity,
+           Codex, and similar tools auto-read <code>AGENTS.md</code>.
+           You don't have to paste anything — they just know.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div>
+        <h3>Credits ran out? Switch agents mid-project</h3>
+        <p>Click <b>Hand off to another AI</b> in the sidebar. CodeGraph builds
+           a ready-to-paste prompt with everything the new agent needs to
+           continue where the previous one stopped.</p>
+      </div>
+    </div>
+
+    <div class="tip">
+      <b>Keep this window open</b> in the background. As your AI edits files,
+      CodeGraph updates the context live so every agent always sees the
+      latest state of your code.
+    </div>
+
+    <div class="modal-actions">
+      <button class="primary" data-close="onboarding">Got it — let's go</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hand-off modal -->
+<div id="handoff" class="modal hidden">
+  <div class="modal-box wide">
+    <button class="modal-close" data-close="handoff">×</button>
+    <h2>Hand off to another AI</h2>
+    <p class="lede">Paste this into Cursor, Antigravity, ChatGPT, Gemini, or any AI
+       you want to continue with.</p>
+
+    <label class="field-label">What were you working on? <span class="optional">(optional — helps the next AI)</span></label>
+    <textarea id="handoffNote" rows="2"
+      placeholder="e.g. adding auth flow, stuck on a CORS error in /api/login"></textarea>
+
+    <label class="field-label">Generated prompt</label>
+    <textarea id="handoffPrompt" rows="14" readonly></textarea>
+
+    <div class="suggestions" id="handoffSuggestions"></div>
+
+    <div class="modal-actions">
+      <button class="secondary" data-close="handoff">Close</button>
+      <button class="primary" id="copyHandoff">Copy prompt</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div id="settings" class="modal hidden">
+  <div class="modal-box">
+    <button class="modal-close" data-close="settings">×</button>
+    <h2>Preferences</h2>
+    <p class="lede">Customize how CodeGraph behaves on your machine.</p>
+
+    <label class="field-label">Editor command
+      <span class="optional">(leave blank to auto-detect VS Code or use OS default)</span></label>
+    <input id="setEditor" type="text" placeholder='e.g. code --goto {file}:{line}' />
+    <div class="hint-text">Placeholders: <code>{file}</code> and <code>{line}</code>.
+      Examples: <code>code --goto {file}:{line}</code> (VS Code),
+      <code>cursor {file}:{line}</code> (Cursor),
+      <code>idea --line {line} {file}</code> (JetBrains).</div>
+
+    <label class="field-label">Extra folders to ignore
+      <span class="optional">(comma-separated)</span></label>
+    <input id="setIgnore" type="text" placeholder="e.g. coverage, tmp, generated" />
+    <div class="hint-text">Added to the built-in list (<code>.git</code>, <code>node_modules</code>,
+      <code>__pycache__</code>, etc).</div>
+
+    <label class="field-label">Heatmap duration
+      <span class="optional">(how long a recently-edited file glows)</span></label>
+    <div class="row-inline">
+      <input id="setHeatmap" type="number" min="1" max="60" step="1" style="width: 80px" />
+      <span class="muted-inline">minutes</span>
+    </div>
+
+    <label class="checkbox-row">
+      <input id="setAutostart" type="checkbox" />
+      <span>Launch CodeGraph automatically at login</span>
+    </label>
+
+    <label class="checkbox-row">
+      <input id="setBobbing" type="checkbox" />
+      <span>Animate nodes (gentle bobbing motion)</span>
+    </label>
+
+    <div class="modal-actions">
+      <button class="secondary" data-close="settings">Cancel</button>
+      <button class="primary" id="saveSettings">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- First-time hint overlay shown when no folder is picked -->
+<div id="emptyHint" class="empty-hint hidden">
+  <div class="eh-inner">
+    <div class="eh-icon">⬢</div>
+    <h2>Pick a folder to get started</h2>
+    <p>Click <b>Pick…</b> in the sidebar and choose the project your AI is working on.
+       CodeGraph will keep every agent (Claude, Cursor, Antigravity, Codex…) in sync automatically.</p>
+    <button class="primary" id="emptyHintPick">Pick a folder…</button>
+    <button class="link" id="emptyHintHelp">How does this work?</button>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
